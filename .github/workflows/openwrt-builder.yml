@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/ccmx200/openwrt
-  REPO_BRANCH: openwrt-25.12
+  REPO_URL: https://github.com/ccmx200/openwrt-6.x
+  REPO_BRANCH: main-nss
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
