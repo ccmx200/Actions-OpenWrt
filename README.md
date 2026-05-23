@@ -1,15 +1,17 @@
 # Salvage-1 OpenWrt 固件
 
-**咸鱼 BIG 板 | 自适配设备 | IPQ8072A (Hawkeye) | QCA8075 + QCA8081**
+**Netgear WAX218 (IPQ8074) | 自适配设备 | QCA8075 + QCA8081**
 
 ---
 
 ## 当前状态
-- ✅ 有线网络 NSS正常运转 内网测试100MB/s左右CPU占用为1~3% (eth0‑3 / lan1‑3 + wan 2.5G)  
-- ✅ 基础系统稳定运行
-- ✅ USB3.0 正常运转
-- ❌ WiFi 暂不可用（校准数据适配中）  
-- ❌ eMMC 暂未挂载（设备树已就绪，内核支持待验证）
+
+- ✅ NAND 全盘 256 MiB rootfs，UBI 挂载正常
+- ✅ eMMC HS400 模式已识别 (3.59 GiB)，可按需格式化挂载
+- ✅ Wi‑Fi 已正常工作（ath11k，原厂 ART 校准数据）
+- ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，NSS 加速）
+- ✅ USB 3.0 正常
+- ✅ 所有网口自动从 ART 分区获取 MAC 地址
 
 ---
 
@@ -17,8 +19,7 @@
 
 ### 准备工作
 - 电脑安装 TFTP 服务器（如 `tftpd64`）
-- 将以下文件放入 TFTP 目录：
-  - `openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi`
+- 将固件文件 `openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi` 放入 TFTP 目录
 - USB‑TTL 串口连接路由器（`115200 8N1`）
 - 电脑 IP 设为 `192.168.1.200`，网线接路由器 LAN 口
 
@@ -30,31 +31,40 @@
 setenv serverip 192.168.1.200
 setenv ipaddr 192.168.1.100
 
-# 设置与设备树一致的分区表（固定分区，超大 rootfs）
-setenv mtdparts 'mtdparts=nand0:0x50000@0x0(0:SBL1),0x10000@0x50000(0:MIBIB),0x20000@0x60000(0:BOOTCONFIG),0x20000@0x80000(0:BOOTCONFIG1),0x180000@0xa0000(0:QSEE),0x180000@0x220000(0:QSEE_1),0x10000@0x3a0000(0:DEVCFG),0x10000@0x3b0000(0:DEVCFG_1),0x10000@0x3c0000(0:APDP),0x10000@0x3d0000(0:APDP_1),0x40000@0x3e0000(0:RPM),0x40000@0x420000(0:RPM_1),0x10000@0x460000(0:CDT),0x10000@0x470000(0:CDT_1),0x10000@0x480000(0:APPSBLENV),0xa0000@0x490000(0:APPSBL),0xa0000@0x530000(0:APPSBL_1),0x40000@0x5d0000(0:ART),0x80000@0x610000(0:ETHPHYFW),0xf970000@0x690000(rootfs)'
-setenv bootcmd 'ubi part rootfs; ubi read 0x44000000 kernel; bootm 0x44000000'
+# 加载固件到内存 (替换为实际文件名)
+tftpboot 0x60000000 openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi
+
+# 擦除整个 NAND 并写入 (注意：必须用实际传输大小，对齐到 0x800)
+nand erase 0x0 0x10000000
+nand write 0x60000000 0x0 0x8b40000   # 替换为 tftpboot 后显示的实际对齐大小
+
+# 设置环境变量 (固定分区，全盘 rootfs)
+setenv mtdids 'nand0=nand0'
+setenv mtdparts 'mtdparts=nand0:0x10000000@0x0(rootfs)'
 setenv bootargs 'console=ttyMSM0,115200n8 ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs rootwait'
+setenv bootcmd 'ubi part rootfs; ubi read 0x44000000 kernel; bootm 0x44000000'
 saveenv
 
-# 刷写固件
-tftpboot 0x60000000 openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi
-nand erase 0x690000 0x0f970000
-nand write 0x60000000 0x690000 ${filesize}
 reset
 ```
 
 3. 路由器重启后，稍等片刻即可通过 `http://192.168.1.1` 或 SSH 访问（无密码）。
 
+> **注意**：首次启动后，系统需要手动创建 `/etc/config/network` 来激活网络接口。
+
 ---
 
 ## 云编译（自用）
+
 本项目基于 OpenWrt 主线 + 自定义 DTS，使用 GitHub Actions 自动构建。  
 主要修改文件：
-- `target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts`
-- `target/linux/qualcommmax/image/ipq807x.mk`
-- `package/firmware/ipq-wifi/Makefile` 及对应的 `board-cuicanmx_salvage-1.ipq8074`
+
+- `target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts` — 设备树
+- `target/linux/qualcommax/image/ipq807x.mk` — 镜像生成配置
+- `package/firmware/ipq-wifi/Makefile` — Wi‑Fi 板级 BDF 包
 
 如需自行编译，请将上述文件放入对应位置，然后执行：
+
 ```bash
 make menuconfig   # 选中 Target Profile: CUICANMX Salvage-1
 make -j$(nproc)
@@ -62,16 +72,29 @@ make -j$(nproc)
 
 ---
 
+## 设备树关键配置
+
+设备树中已通过 SPI NOR 的 `0:ART` 分区提供 Wi‑Fi 校准数据和网口 MAC 地址：
+
+- Wi‑Fi 校准数据：`nvmem-cells = <&caldata>;`（自动从 SPI NOR 0x20000 偏移读取）
+- 网口 MAC 地址：自动从 `0:ART` 的 `macaddr@0/6/c/18` 获取
+
+同时，NAND 已定义为全盘 `rootfs`，eMMC 控制器已启用 HS400 模式。
+
+---
+
 ## 恢复原厂
-若想回到原厂系统，请用备份的 `mtd19_rootfs.bin` 等文件覆盖，并恢复原始 U‑Boot 环境变量。详见备份时的文档。
+
+若想回到原厂系统，请用备份的原厂分区文件通过 U‑Boot 恢复，并恢复原始 U‑Boot 环境变量（`mtdparts`、`bootcmd` 等）。详见备份时的文档。
 
 ---
 
 ## 贡献与反馈
-- 硬件适配：cuicanmx  
+
+- 硬件适配：cuicanmx
 - 项目地址：[ActionsOP](https://github.com/ccmx200/Actions-OpenWrt)
 - 问题反馈：提交 Issue 或邮件联系
 
 ---
 
-**注意**：本固件目前为自用测试版，WiFi 和 eMMC 功能仍在完善中。刷机前请做好原厂分区备份！
+**注意**：本固件为自用适配版，使用前请做好原厂分区备份。固件持续完善中，欢迎反馈使用问题。
