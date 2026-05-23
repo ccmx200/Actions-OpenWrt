@@ -50,43 +50,16 @@ reset
 
 3. 路由器重启后，稍等片刻即可通过 `http://192.168.1.1` 或 SSH 访问（无密码）。
 
-> **注意**：首次启动后，系统需要手动创建 `/etc/config/network` 来激活网络接口。
-
----
-
-## 云编译（自用）
-
-本项目基于 OpenWrt 主线 + 自定义 DTS，使用 GitHub Actions 自动构建。  
-主要修改文件：
-
-- `target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts` — 设备树
-- `target/linux/qualcommax/image/ipq807x.mk` — 镜像生成配置
-- `package/firmware/ipq-wifi/Makefile` — Wi‑Fi 板级 BDF 包
-
-如需自行编译，请将上述文件放入对应位置，然后执行：
-
-```bash
-make menuconfig   # 选中 Target Profile: CUICANMX Salvage-1
-make -j$(nproc)
-```
-
----
-
 ## 设备树关键配置
 
 设备树中已通过 SPI NOR 的 `0:ART` 分区提供 Wi‑Fi 校准数据和网口 MAC 地址：
-
-- Wi‑Fi 校准数据：`nvmem-cells = <&caldata>;`（自动从 SPI NOR 0x20000 偏移读取）
-- 网口 MAC 地址：自动从 `0:ART` 的 `macaddr@0/6/c/18` 获取
-
 同时，NAND 已定义为全盘 `rootfs`，eMMC 控制器已启用 HS400 模式。
 
 ---
 
 ## 恢复原厂
 
-若想回到原厂系统，请用备份的原厂分区文件通过 U‑Boot 恢复，并恢复原始 U‑Boot 环境变量（`mtdparts`、`bootcmd` 等）。详见备份时的文档。
-
+若想回到原厂系统，请用备份的原厂分区文件通过 U‑Boot 恢复，并恢复原始 U‑Boot 环境变量（`mtdparts`、`bootcmd` 等）。
 ---
 
 ## 贡献与反馈
