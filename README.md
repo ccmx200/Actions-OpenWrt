@@ -9,7 +9,7 @@
 - ✅ NAND 全盘 256 MiB rootfs，UBI 挂载正常
 - ✅ eMMC HS400 模式已识别 (3.59 GiB)，可按需格式化挂载
 - ✅ Wi‑Fi 已正常工作(!依赖ART分区!)
-- ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，NSS 加速）
+- ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，NSS 加速 'libwrt CONFIG_NSS_FIRMWARE_VERSION_11_4=y'）
 - ✅ USB 3.0 正常
 - 📶 m.2通信模块接口正在尝试适配，目前已添加QModem和相关内核配置到编译配置中
 
