@@ -18,3 +18,12 @@
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 
 #git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
+
+echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
+
+# 更新并安装软件源包
+./scripts/feeds update qmodem
+./scripts/feeds install -a -p qmodem
+
+# (可选) 强制安装以覆盖现有的驱动程序/应用
+./scripts/feeds install -a -f -p qmodem
