@@ -19,8 +19,8 @@
 
 ### 准备工作
 - 电脑安装 TFTP 服务器（如 `tftpd64`）
-- 将固件文件 `openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi` 放入 TFTP 目录
-- USB‑TTL 串口连接路由器（`115200 8N1`）
+- 将固件文件 `libwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-factory.ubi` 放入 TFTP 目录
+- console线连接路由器（`靠近电源的那个网口`）
 - 电脑 IP 设为 `192.168.1.200`，网线接路由器 LAN 口
 
 ### 写入固件（U‑Boot 环境）
@@ -36,7 +36,7 @@ tftpboot 0x60000000 openwrt-qualcommax-ipq807x-cuicanmx_salvage-1-squashfs-facto
 
 # 擦除整个 NAND 并写入 (注意：必须用实际传输大小，对齐到 0x800)
 nand erase 0x0 0x10000000
-nand write 0x60000000 0x0 0x8b40000   # 替换为 tftpboot 后显示的实际对齐大小
+nand write 0x60000000 0x0 xxxxx   # 替换为 tftpboot 后显示的实际对齐大小
 
 # 设置环境变量 (固定分区，全盘 rootfs)
 setenv mtdids 'nand0=nand0'
