@@ -1,6 +1,6 @@
 # Salvage-1 OpenWrt 固件
 
-**咸鱼板子 IPQ8074 (三木爱折腾) | 自适配设备 | QCA8075 + QCA8081**
+**咸鱼板子 IPQ8072a (三木爱折腾) | 自适配设备 | QCA8075 + QCA8081**
 
 ---
 
@@ -8,8 +8,9 @@
 
 - ✅ NAND 全盘 256 MiB rootfs，UBI 挂载正常
 - ✅ eMMC HS400 模式已识别 (3.59 GiB)，可按需格式化挂载
+- ✅ 1Gb运行内存
 - ✅ Wi‑Fi 已正常工作(!依赖ART分区!)
-- ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，NSS 加速 'libwrt CONFIG_NSS_FIRMWARE_VERSION_11_4=y'）
+- ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，支持NSS 加速 'libwrt CONFIG_NSS_FIRMWARE_VERSION_11_4=y'）
 - ✅ USB 3.0 正常
 - ✅ SD卡槽正常
 - 已添加QModem和相关内核配置到固件,但因为m.2接口无法驱动目前只能使用usb转接板，网口mac需要自行固化
