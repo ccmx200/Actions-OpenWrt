@@ -1,0 +1,584 @@
+#!/bin/bash
+set -e
+
+# ==============================
+#  检查是否在 OpenWrt 根目录
+# ==============================
+if [ ! -f feeds.conf.default ] && [ ! -f Makefile ]; then
+    echo "错误: 请在 OpenWrt 源码根目录运行此脚本。"
+    exit 1
+fi
+
+echo "应用 Salvage-1 设备支持修改..."
+
+# ==============================================
+# 1. 修改 uboot-envtools 支持
+# ==============================================
+file="package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq807x"
+if grep -q 'cuicanmx,salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    sed -i '/zte,mf269)/a\\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;' "$file"
+    echo "  [完成] 已修改 $file"
+fi
+
+# ==============================================
+# 2. 修改 ipq-wifi Makefile（添加 board 名称）
+# ==============================================
+file="package/firmware/ipq-wifi/Makefile"
+if grep -q 'cuicanmx_salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    # 在 ALLWIFIBOARDS 列表中添加一行
+    sed -i '/cmiot_ax18 \\/a\\\tcuicanmx_salvage-1 \\' "$file"
+    # 在 eval generate-ipq-wifi-package 段落末尾添加新行
+    sed -i '/$(eval $(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE))/a$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' "$file"
+    echo "  [完成] 已修改 $file"
+fi
+
+# ==============================================
+# 3. 新建 DTS 文件
+# ==============================================
+file="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
+if [ -f "$file" ]; then
+    echo "  [跳过] $file 已存在。"
+else
+    mkdir -p "$(dirname "$file")"
+    cat > "$file" << 'DTS_EOF'
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/* Copyright (c) 2025-2026, cuicanmx <arl96075@163.com> */
+
+/dts-v1/;
+
+#include "ipq8074.dtsi"
+#include "ipq8074-hk-cpu.dtsi"
+#include "ipq8074-ess.dtsi"
+#include "ipq8074-nss.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Salvage-1";
+	compatible = "cuicanmx,salvage-1", "qcom,ipq8074";
+
+	aliases {
+		serial0 = &blsp1_uart5;
+		ethernet0 = &dp5;
+		ethernet1 = &dp3;
+		ethernet2 = &dp2;
+		ethernet3 = &dp1;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs-append = " root=/dev/ubiblock0_1";
+	};
+
+	/* SD 卡 3.3V 电源，由 GPIO21 使能 */
+	vqmmc_sd_reg: regulator-vqmmc-sd {
+		compatible = "regulator-fixed";
+		regulator-name = "vqmmc_sd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	/* 原厂 WPS 按键 */
+	gpio_keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&button_pins>;
+		pinctrl-names = "default";
+
+		wps {
+			label = "wps";
+			gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_WPS_BUTTON>;
+			debounce-interval = <60>;
+		};
+	};
+
+	/* 原厂 LED */
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-0 = <&led_pins>;
+		pinctrl-names = "default";
+
+		led_heartbeat: led_heartbeat {
+			label = "led_heartbeat";
+			gpios = <&tlmm 20 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		led_sys_r: SYS_R {
+			label = "SYS_R";
+			gpios = <&tlmm 30 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_sys_g: SYS_G {
+			label = "SYS_G";
+			gpios = <&tlmm 54 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_5g_r: 5G_R {
+			label = "5G_R";
+			gpios = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_5g_g: 5G_G {
+			label = "5G_G";
+			gpios = <&tlmm 19 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_5g_b: 5G_B {
+			label = "5G_B";
+			gpios = <&tlmm 29 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_rssi_r: RSSI_R {
+			label = "RSSI_R";
+			gpios = <&tlmm 55 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_rssi_g: RSSI_G {
+			label = "RSSI_G";
+			gpios = <&tlmm 56 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led_rssi_b: RSSI_B {
+			label = "RSSI_B";
+			gpios = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+	};
+};
+
+/* 主线缺失的 SD 卡控制器 */
+&soc {
+	sdhc_2: mmc@7864900 {
+		compatible = "qcom,ipq8074-sdhci", "qcom,sdhci-msm-v4";
+		reg = <0x7864900 0x500>, <0x7864000 0x800>;
+		reg-names = "hc", "core";
+		interrupts = <GIC_SPI 125 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 221 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "hc_irq", "pwr_irq";
+		clocks = <&gcc GCC_SDCC2_AHB_CLK>,
+			 <&gcc GCC_SDCC2_APPS_CLK>,
+			 <&xo>;
+		clock-names = "iface", "core", "xo";
+		resets = <&gcc GCC_SDCC2_BCR>;
+		max-frequency = <192000000>;
+		mmc-ddr-1_8v;
+		bus-width = <4>;
+		status = "okay";
+	};
+};
+
+&tlmm {
+	mdio_pins: mdio-pins {
+		mdc {
+			pins = "gpio68";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		mdio {
+			pins = "gpio69";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	spi1_pins: spi1-pins {
+		mux {
+			pins = "gpio42", "gpio43", "gpio44", "gpio45";
+			function = "blsp1_spi";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+
+	sd_pins: sd-pins {
+		mux {
+			pins = "gpio63";
+			function = "sd_card";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	/* PCIe0 引脚 */
+	pcie0_pins: pcie0-pins {
+		pcie0_rst {
+			pins = "gpio58";
+			function = "pcie0_rst";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		pcie0_wake {
+			pins = "gpio59";
+			function = "pcie0_wake";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+	};
+
+	/* 原厂按键引脚 */
+	button_pins: button-pins {
+		wps_button {
+			pins = "gpio34";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	/* 原厂 LED 引脚 */
+	led_pins: led-pins {
+		led_heartbeat {
+			pins = "gpio20";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		SYS_R {
+			pins = "gpio30";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		SYS_G {
+			pins = "gpio54";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		5G_R {
+			pins = "gpio51";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		5G_G {
+			pins = "gpio19";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		5G_B {
+			pins = "gpio29";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		RSSI_R {
+			pins = "gpio55";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		RSSI_G {
+			pins = "gpio56";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+		RSSI_B {
+			pins = "gpio50";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+	};
+};
+
+/* 基础外设 */
+&blsp1_uart5 { status = "okay"; };
+&prng { status = "okay"; };
+&cryptobam { status = "okay"; };
+&crypto { status = "okay"; };
+&qpic_bam { status = "okay"; };
+
+/* SPI NOR */
+&blsp1_spi1 {
+	status = "okay";
+	pinctrl-0 = <&spi1_pins>;
+	pinctrl-names = "default";
+
+	flash@0 {
+		reg = <0>;
+		compatible = "jedec,spi-nor";
+		spi-max-frequency = <50000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 { label = "0:SBL1"; reg = <0x0 0x50000>; read-only; };
+			partition@50000 { label = "0:MIBIB"; reg = <0x50000 0x10000>; read-only; };
+			partition@60000 { label = "0:BOOTCONFIG"; reg = <0x60000 0x20000>; read-only; };
+			partition@80000 { label = "0:BOOTCONFIG1"; reg = <0x80000 0x20000>; read-only; };
+			partition@a0000 { label = "0:QSEE"; reg = <0xa0000 0x180000>; read-only; };
+			partition@220000 { label = "0:QSEE_1"; reg = <0x220000 0x180000>; read-only; };
+			partition@3a0000 { label = "0:DEVCFG"; reg = <0x3a0000 0x10000>; read-only; };
+			partition@3b0000 { label = "0:DEVCFG_1"; reg = <0x3b0000 0x10000>; read-only; };
+			partition@3c0000 { label = "0:APDP"; reg = <0x3c0000 0x10000>; read-only; };
+			partition@3d0000 { label = "0:APDP_1"; reg = <0x3d0000 0x10000>; read-only; };
+			partition@3e0000 { label = "0:RPM"; reg = <0x3e0000 0x40000>; read-only; };
+			partition@420000 { label = "0:RPM_1"; reg = <0x420000 0x40000>; read-only; };
+			partition@460000 { label = "0:CDT"; reg = <0x460000 0x10000>; read-only; };
+			partition@470000 { label = "0:CDT_1"; reg = <0x470000 0x10000>; read-only; };
+			partition@480000 { label = "0:APPSBLENV"; reg = <0x480000 0x10000>; };
+			partition@490000 { label = "0:APPSBL"; reg = <0x490000 0xa0000>; read-only; };
+			partition@530000 { label = "0:APPSBL_1"; reg = <0x530000 0xa0000>; read-only; };
+			partition@5d0000 { label = "0:ART"; reg = <0x5d0000 0x40000>; read-only; };
+			partition@610000 { label = "0:ETHPHYFW"; reg = <0x610000 0x80000>; read-only; };
+		};
+	};
+};
+
+/* NAND */
+&qpic_nand {
+	status = "okay";
+
+	nand@0 {
+		reg = <0>;
+		nand-ecc-strength = <8>;
+		nand-ecc-step-size = <512>;
+		nand-bus-width = <8>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "rootfs";
+				reg = <0x0 0x10000000>;
+			};
+		};
+	};
+};
+
+/* eMMC */
+&sdhc_1 {
+	status = "okay";
+	non-removable;
+	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	max-frequency = <192000000>;
+};
+
+/* SD 卡槽 */
+&sdhc_2 {
+	pinctrl-0 = <&sd_pins>;
+	pinctrl-names = "default";
+	cd-gpios = <&tlmm 63 GPIO_ACTIVE_LOW>;
+	vqmmc-supply = <&vqmmc_sd_reg>;
+};
+
+/* 双 USB */
+&qusb_phy_0 { status = "okay"; };
+&ssphy_0 { status = "okay"; };
+&usb_0 { status = "okay"; };
+
+&qusb_phy_1 { status = "okay"; };
+&ssphy_1 { status = "okay"; };
+&usb_1 { status = "okay"; };
+
+/* ========== PCIe 全部启用 ========== */
+&pcie_qmp0 { status = "okay"; };
+&pcie_qmp1 { status = "okay"; };
+
+&pcie0 {
+	status = "okay";
+	perst-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
+};
+
+&pcie1 {
+	status = "okay";
+	perst-gpios = <&tlmm 61 GPIO_ACTIVE_LOW>;
+};
+
+/* MDIO 和 PHY */
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	ethernet-phy-package@0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "qcom,qca8075-package";
+		reg = <0>;
+		qcom,package-mode = "qsgmii";
+
+		qca8075_0: ethernet-phy@0 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <0>;
+		};
+		qca8075_1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+		};
+		qca8075_2: ethernet-phy@2 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <2>;
+		};
+	};
+
+	qca8081: ethernet-phy@24 {
+		compatible = "ethernet-phy-id004d.d101";
+		reg = <24>;
+		reset-deassert-us = <10000>;
+		reset-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
+	};
+};
+
+/* 交换机 */
+&switch {
+	status = "okay";
+
+	switch_lan_bmp = <(ESS_PORT1 | ESS_PORT2 | ESS_PORT3)>;
+	switch_wan_bmp = <ESS_PORT5>;
+	switch_mac_mode = <MAC_MODE_QSGMII>;
+	switch_mac_mode1 = <MAC_MODE_SGMII_PLUS>;
+
+	qcom,port_phyinfo {
+		port@1 { port_id = <1>; phy_address = <0>; };
+		port@2 { port_id = <2>; phy_address = <1>; };
+		port@3 { port_id = <3>; phy_address = <2>; };
+		port@5 { port_id = <5>; phy_address = <24>; port_mac_sel = "QGMAC_PORT"; };
+	};
+};
+
+&edma { status = "okay"; };
+
+/* 网络接口 */
+&dp1 {
+	status = "okay";
+	phy-mode = "qsgmii";
+	phy-handle = <&qca8075_0>;
+	label = "lan3";
+};
+
+&dp2 {
+	status = "okay";
+	phy-mode = "qsgmii";
+	phy-handle = <&qca8075_1>;
+	label = "lan2";
+};
+
+&dp3 {
+	status = "okay";
+	phy-mode = "qsgmii";
+	phy-handle = <&qca8075_2>;
+	label = "lan1";
+};
+
+&dp5 {
+	status = "okay";
+	phy-mode = "sgmii";
+	phy-handle = <&qca8081>;
+	label = "wan";
+};
+
+/* Wi‑Fi */
+&wifi {
+	status = "okay";
+	qcom,ath11k-calibration-variant = "Salvage-1";
+};
+DTS_EOF
+    echo "  [完成] 已创建 $file"
+fi
+
+# ==============================================
+# 4. 修改 ipq807x.mk 添加设备定义
+# ==============================================
+file="target/linux/qualcommax/image/ipq807x.mk"
+if grep -q 'Device/cuicanmx_salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    cat >> "$file" << 'MK_EOF'
+
+define Device/cuicanmx_salvage-1
+  $(call Device/FitImage)
+  $(call Device/UbiFit)
+  DEVICE_VENDOR := CUICANMX
+  DEVICE_MODEL := Salvage-1
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  DEVICE_DTS_CONFIG := config@hk01
+  SOC := ipq8072
+  DEVICE_PACKAGES := ath11k-firmware-ipq8074 ipq-wifi-cuicanmx_salvage-1
+endef
+TARGET_DEVICES += cuicanmx_salvage-1
+MK_EOF
+    echo "  [完成] 已追加到 $file"
+fi
+
+# ==============================================
+# 5. 修改 02_network 添加接口配置
+# ==============================================
+file="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
+if grep -q 'cuicanmx,salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    sed -i '/compex,wpq873\\/a\\tcuicanmx,salvage-1|\\' "$file"
+    echo "  [完成] 已修改 $file"
+fi
+
+# ==============================================
+# 6. 修改 11-ath11k-caldata 添加 ART 读取
+# ==============================================
+file="target/linux/qualcommax/ipq807x/base-files/etc/hotplug.d/firmware/11-ath11k-caldata"
+if grep -q 'cuicanmx,salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    sed -i '/zyxel,nwa210ax)/a\\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;' "$file"
+    echo "  [完成] 已修改 $file"
+fi
+
+# ==============================================
+# 7. 修改 platform.sh 添加升级支持
+# ==============================================
+file="target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
+if grep -q 'cuicanmx,salvage-1' "$file"; then
+    echo "  [跳过] $file 已包含修改。"
+else
+    sed -i '/aliyun,ap8220\\/a\\tcuicanmx,salvage-1|\\' "$file"
+    echo "  [完成] 已修改 $file"
+fi
+
+# ==============================================
+# 8. 二进制 WiFi 板级文件提示
+# ==============================================
+binary_file="./board-cuicanmx_salvage-1.ipq8074"
+if [ -f "$binary_file" ]; then
+    echo "  [跳过] $binary_file 已存在。"
+else
+    echo ""
+    echo "==============================================="
+    echo " 警告: 缺少二进制文件！"
+    echo " $binary_file"
+    echo " 请从原仓库或编译输出中获取该文件并复制到该路径，"
+    echo " 否则编译会因缺失文件而失败。"
+    echo "==============================================="
+    echo ""
+fi
+
+echo ""
+echo "所有修改已应用完毕。"
+echo "如有二进制文件缺失，请按提示补充后再编译。"
