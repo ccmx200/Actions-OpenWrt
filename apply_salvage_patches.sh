@@ -111,8 +111,14 @@ if grep -q 'cuicanmx_salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    sed -i '/cmiot_ax18 \\/a\\\tcuicanmx_salvage-1 \\' "$F"
-    sed -i '/$(eval $(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE))/a$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' "$F"
+    # 在 ALLWIFIBOARDS 列表插入一行（带续行符）
+    awk -v add='\tcuicanmx_salvage-1 \\' \
+      '{print} /cmiot_ax18 \\/{print add}' \
+      "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # 在末尾追加 eval 调用
+    awk -v add='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' \
+      '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print add}' \
+      "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F 已修改"
 fi
 
