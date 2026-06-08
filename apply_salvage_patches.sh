@@ -565,7 +565,7 @@ fi
 # ==============================================
 # 8. 二进制 WiFi 板级文件提示
 # ==============================================
-binary_file="./board-cuicanmx_salvage-1.ipq8074"
+binary_file="../board-cuicanmx_salvage-1.ipq8074"
 if [ -f "$binary_file" ]; then
     echo "  [跳过] $binary_file 已存在。"
 else
