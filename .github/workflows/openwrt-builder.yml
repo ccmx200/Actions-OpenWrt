@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/ccmx200/openwrt-6.x
+  REPO_URL: https://github.com/LiBwrt/openwrt-6.x
   REPO_BRANCH: 25.12-nss
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -64,9 +64,12 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-
+        
+    - name: Add Salvage_1
+      run: cd openwrt && ./apply_salvage_patches.sh
+      
     - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
+      run: cd openwrt && ./scripts/feeds update -a 
 
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
