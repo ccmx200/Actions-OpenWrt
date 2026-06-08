@@ -1,49 +1,127 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-# ==============================
-#  检查是否在 OpenWrt 根目录
-# ==============================
+#===========================
+# Color & Emoji Definitions
+#===========================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+CHECK_MARK="✅"
+CROSS_MARK="❌"
+WARN="⚠️"
+INFO="ℹ️"
+ROCKET="🚀"
+PACKAGE="📦"
+GEAR="⚙️"
+FILE_ICON="📄"
+PARTY="🎉"
+
+#===========================
+# Helper Functions
+#===========================
+print_header() {
+    echo -e "${CYAN}${BOLD}============================================${NC}"
+    echo -e "${CYAN}${BOLD}   Salvage-1 设备支持自动补丁脚本${NC}"
+    echo -e "${CYAN}${BOLD}============================================${NC}"
+    echo ""
+}
+
+print_step() {
+    echo -e "${BOLD}${GEAR} 步骤 $1/$2: $3${NC}"
+}
+
+print_success() {
+    echo -e "   ${GREEN}${CHECK_MARK} 成功：${1}${NC}"
+}
+
+print_skip() {
+    echo -e "   ${YELLOW}${WARN} 跳过：${1}（已存在）${NC}"
+}
+
+print_warn() {
+    echo -e "   ${YELLOW}${WARN} 警告：${1}${NC}"
+}
+
+print_error() {
+    echo -e "   ${RED}${CROSS_MARK} 错误：${1}${NC}"
+}
+
+backup_file() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        cp "$file" "${file}.bak.$(date +%s)"
+        echo -e "   ${INFO} 已备份原文件：${file}.bak.$(date +%s)"
+    fi
+}
+
+ensure_file_writable() {
+    local file="$1"
+    if [ -f "$file" ] && [ ! -w "$file" ]; then
+        print_error "文件 $file 不可写"
+        exit 1
+    fi
+}
+
+#===========================
+# Pre-flight Checks
+#===========================
 if [ ! -f feeds.conf.default ] && [ ! -f Makefile ]; then
-    echo "错误: 请在 OpenWrt 源码根目录运行此脚本。"
+    echo -e "${RED}${CROSS_MARK} 错误：请在 OpenWrt 源码根目录运行此脚本。${NC}"
     exit 1
 fi
 
-echo "应用 Salvage-1 设备支持修改..."
+print_header
 
-# ==============================================
-# 1. 修改 uboot-envtools 支持
-# ==============================================
+TOTAL_STEPS=8
+CURRENT_STEP=0
+
+#===========================
+# 1. uboot-envtools
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "uboot-envtools 环境变量支持"
 file="package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq807x"
+ensure_file_writable "$file"
 if grep -q 'cuicanmx,salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
+    backup_file "$file"
     sed -i '/zte,mf269)/a\\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;' "$file"
-    echo "  [完成] 已修改 $file"
+    print_success "$file 已修改"
 fi
 
-# ==============================================
-# 2. 修改 ipq-wifi Makefile（添加 board 名称）
-# ==============================================
+#===========================
+# 2. ipq-wifi Makefile
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "ipq-wifi 固件包注册"
 file="package/firmware/ipq-wifi/Makefile"
+ensure_file_writable "$file"
 if grep -q 'cuicanmx_salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
-    # 在 ALLWIFIBOARDS 列表中添加一行
+    backup_file "$file"
     sed -i '/cmiot_ax18 \\/a\\\tcuicanmx_salvage-1 \\' "$file"
-    # 在 eval generate-ipq-wifi-package 段落末尾添加新行
     sed -i '/$(eval $(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE))/a$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' "$file"
-    echo "  [完成] 已修改 $file"
+    print_success "$file 已修改"
 fi
 
-# ==============================================
-# 3. 新建 DTS 文件
-# ==============================================
+#===========================
+# 3. DTS 文件
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "设备树源文件 (DTS)"
 file="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
 if [ -f "$file" ]; then
-    echo "  [跳过] $file 已存在。"
+    print_skip "$file"
 else
     mkdir -p "$(dirname "$file")"
+    # 注意：此处使用 heredoc 原样写入，内容与之前完全一致，为节省篇幅省略具体内容，实际脚本中应保留完整 DTS
     cat > "$file" << 'DTS_EOF'
 // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 /* Copyright (c) 2025-2026, cuicanmx <arl96075@163.com> */
@@ -501,16 +579,20 @@ else
 	qcom,ath11k-calibration-variant = "Salvage-1";
 };
 DTS_EOF
-    echo "  [完成] 已创建 $file"
+    print_success "新建设备树文件 $file"
 fi
 
-# ==============================================
-# 4. 修改 ipq807x.mk 添加设备定义
-# ==============================================
+#===========================
+# 4. 映像 Makefile 设备定义
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "映像生成规则 (ipq807x.mk)"
 file="target/linux/qualcommax/image/ipq807x.mk"
+ensure_file_writable "$file"
 if grep -q 'Device/cuicanmx_salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
+    backup_file "$file"
     cat >> "$file" << 'MK_EOF'
 
 define Device/cuicanmx_salvage-1
@@ -526,59 +608,84 @@ define Device/cuicanmx_salvage-1
 endef
 TARGET_DEVICES += cuicanmx_salvage-1
 MK_EOF
-    echo "  [完成] 已追加到 $file"
+    print_success "追加设备定义到 $file"
 fi
 
-# ==============================================
-# 5. 修改 02_network 添加接口配置
-# ==============================================
+#===========================
+# 5. 网络接口配置
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "网络接口配置 (02_network)"
 file="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
+ensure_file_writable "$file"
 if grep -q 'cuicanmx,salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
+    backup_file "$file"
     sed -i '/compex,wpq873\\/a\\tcuicanmx,salvage-1|\\' "$file"
-    echo "  [完成] 已修改 $file"
+    print_success "已添加接口配置到 $file"
 fi
 
-# ==============================================
-# 6. 修改 11-ath11k-caldata 添加 ART 读取
-# ==============================================
+#===========================
+# 6. 校准数据提取
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "WiFi 校准数据 (11-ath11k-caldata)"
 file="target/linux/qualcommax/ipq807x/base-files/etc/hotplug.d/firmware/11-ath11k-caldata"
+ensure_file_writable "$file"
 if grep -q 'cuicanmx,salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
+    backup_file "$file"
     sed -i '/zyxel,nwa210ax)/a\\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;' "$file"
-    echo "  [完成] 已修改 $file"
+    print_success "已添加校准数据提取规则"
 fi
 
-# ==============================================
-# 7. 修改 platform.sh 添加升级支持
-# ==============================================
+#===========================
+# 7. 升级平台支持
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "固件升级平台 (platform.sh)"
 file="target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
+ensure_file_writable "$file"
 if grep -q 'cuicanmx,salvage-1' "$file"; then
-    echo "  [跳过] $file 已包含修改。"
+    print_skip "$file"
 else
+    backup_file "$file"
     sed -i '/aliyun,ap8220\\/a\\tcuicanmx,salvage-1|\\' "$file"
-    echo "  [完成] 已修改 $file"
+    print_success "已添加升级支持"
 fi
 
-# ==============================================
-# 8. 二进制 WiFi 板级文件提示
-# ==============================================
+#===========================
+# 8. 二进制 WiFi 板级文件检查
+#===========================
+CURRENT_STEP=$((CURRENT_STEP+1))
+print_step $CURRENT_STEP $TOTAL_STEPS "WiFi 板级固件二进制文件"
 binary_file="../board-cuicanmx_salvage-1.ipq8074"
 if [ -f "$binary_file" ]; then
-    echo "  [跳过] $binary_file 已存在。"
+    print_success "二进制文件已就位：$binary_file"
 else
-    echo ""
-    echo "==============================================="
-    echo " 警告: 缺少二进制文件！"
-    echo " $binary_file"
-    echo " 请从原仓库或编译输出中获取该文件并复制到该路径，"
-    echo " 否则编译会因缺失文件而失败。"
-    echo "==============================================="
-    echo ""
+    print_warn "缺少二进制文件：$binary_file"
+    echo -e "   ${YELLOW}请手动将 board-cuicanmx_salvage-1.ipq8074 放置到源码上层目录，${NC}"
+    echo -e "   ${YELLOW}或修改脚本中的路径。编译时软件包 ipq-wifi-cuicanmx_salvage-1 需要此文件。${NC}"
 fi
 
+#===========================
+# Summary & Key Modifications
+#===========================
 echo ""
-echo "所有修改已应用完毕。"
-echo "如有二进制文件缺失，请按提示补充后再编译。"
+echo -e "${CYAN}${BOLD}============================================${NC}"
+echo -e "${CYAN}${BOLD}   ${PARTY} 补丁应用完毕！关键修改摘要${NC}"
+echo -e "${CYAN}${BOLD}============================================${NC}"
+echo ""
+echo -e "  ${FILE_ICON}  uboot-envtools   : 添加 appsblenv 分区 (大小 0x10000)"
+echo -e "  ${FILE_ICON}  ipq-wifi Makefile: 注册板级固件包 ipq-wifi-cuicanmx_salvage-1"
+echo -e "  ${FILE_ICON}  DTS 文件         : ipq8072-salvage-1.dts (455 行)"
+echo -e "  ${FILE_ICON}  ipq807x.mk       : 生成 FIT/Ubi 映像，启用 NAND 升级"
+echo -e "  ${FILE_ICON}  02_network       : 设定 lan wan 接口 (eth0~eth3)"
+echo -e "  ${FILE_ICON}  11-ath11k-caldata: 从 0:ART 分区 0x20000 偏移提取校准数据"
+echo -e "  ${FILE_ICON}  platform.sh      : 支持 sysupgrade (nand_do_upgrade)"
+echo ""
+echo -e "${YELLOW}  ${WARN} 若二进制文件缺失，编译 ipq-wifi-cuicanmx_salvage-1 包时将失败。${NC}"
+echo -e "${GREEN}  现在可以运行 make menuconfig 并选择 Target Profile = CUICANMX Salvage-1${NC}"
+echo ""
