@@ -13,7 +13,7 @@ CHECK="✅"; WARN="⚠️"; GEAR="⚙️"; FILE_ICON="📄"; PARTY="🎉"; MAG="
 #===========================
 print_header() {
     echo -e "${CYAN}${BOLD}============================================${NC}"
-    echo -e "${CYAN}${BOLD}   Salvage-1 自动补丁脚本（安全版）${NC}"
+    echo -e "${CYAN}${BOLD}   Salvage-1 自动补丁脚本（稳定版）${NC}"
     echo -e "${CYAN}${BOLD}============================================${NC}\n"
 }
 print_step() { echo -e "${BOLD}${GEAR} 步骤 $1/$2: $3${NC}"; }
@@ -46,7 +46,7 @@ TOTAL_STEPS=8
 STEP=0
 
 #===========================
-# 1. 复制设备树
+# 1. 复制 DTS
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 DTS"
 DST="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
@@ -54,7 +54,7 @@ mkdir -p "$(dirname "$DST")"
 if [ -f "$DST" ]; then print_skip "$DST"; else cp "$DTS_SRC" "$DST"; print_ok "DTS 已复制"; fi
 
 #===========================
-# 2. 复制 WiFi 固件
+# 2. 复制 Board 固件
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 Board 固件"
 DST="package/firmware/ipq-wifi/src/board-cuicanmx_salvage-1.ipq8074"
@@ -70,8 +70,9 @@ if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    awk -v add='\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;' \
-      '{print} /zte,mf269)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # 使用真实 Tab 缩进
+    add=$'\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;'
+    awk -v add="$add" '{print} /zte,mf269)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
@@ -84,13 +85,13 @@ if grep -q 'cuicanmx_salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    # 插入 ALLWIFIBOARDS 行
-    awk -v add='\tcuicanmx_salvage-1 \\' \
-      '{print} /cmiot_ax18 \\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-    # 插入 eval 行
-    awk -v add='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' \
-      '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print add}' \
-      "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # ALLWIFIBOARDS 行 (带 Tab 和续行符)
+    add=$'\tcuicanmx_salvage-1 \\'
+    awk -v add="$add" '{print} /cmiot_ax18 \\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # eval 调用行 (无缩进要求)
+    add2='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))'
+    awk -v add="$add2" '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print add}' \
+        "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
@@ -122,7 +123,7 @@ MK_EOF
 fi
 
 #===========================
-# 6. 02_network
+# 6. 02_network (修复模式)
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "网络接口 02_network"
 F="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
@@ -130,8 +131,8 @@ if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    awk -v add='\tcuicanmx,salvage-1|\\' \
-      '{print} /compex,wpq873\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    add=$'\tcuicanmx,salvage-1|\\'
+    awk -v add="$add" '{print} /compex,wpq873\|\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
@@ -144,13 +145,13 @@ if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    awk -v add='\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;' \
-      '{print} /zyxel,nwa210ax)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    add=$'\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;'
+    awk -v add="$add" '{print} /zyxel,nwa210ax)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
 #===========================
-# 8. platform.sh 升级
+# 8. platform.sh (修复模式)
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "升级平台 platform.sh"
 F="target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
@@ -158,8 +159,8 @@ if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    awk -v add='\tcuicanmx,salvage-1|\\' \
-      '{print} /aliyun,ap8220\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    add=$'\tcuicanmx,salvage-1|\\'
+    awk -v add="$add" '{print} /aliyun,ap8220\|\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
