@@ -2,26 +2,23 @@
 set -euo pipefail
 
 #===========================
-# Color & Emoji Definitions
+# Color & Emoji
 #===========================
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
-CHECK="✅"; WARN="⚠️"; GEAR="⚙️"; FILE_ICON="📄"; PARTY="🎉"
+CHECK="✅"; WARN="⚠️"; GEAR="⚙️"; FILE_ICON="📄"; PARTY="🎉"; MAG="🔍"
 
 #===========================
-# Helper Functions
+# Helper
 #===========================
 print_header() {
     echo -e "${CYAN}${BOLD}============================================${NC}"
-    echo -e "${CYAN}${BOLD}   Salvage-1 设备支持自动补丁脚本${NC}"
+    echo -e "${CYAN}${BOLD}   Salvage-1 自动补丁脚本（安全版）${NC}"
     echo -e "${CYAN}${BOLD}============================================${NC}\n"
 }
-
 print_step() { echo -e "${BOLD}${GEAR} 步骤 $1/$2: $3${NC}"; }
 print_ok()   { echo -e "   ${GREEN}${CHECK} ${1}${NC}"; }
 print_skip() { echo -e "   ${YELLOW}${WARN} 跳过：${1}（已存在）${NC}"; }
-print_warn() { echo -e "   ${YELLOW}${WARN} 警告：${1}${NC}"; }
-
 backup_file() {
     local f="$1"
     if [ -f "$f" ]; then
@@ -31,102 +28,76 @@ backup_file() {
 }
 
 #===========================
-# Pre-flight Checks
+# Pre-check
 #===========================
 if [ ! -f feeds.conf.default ] && [ ! -f Makefile ]; then
-    echo -e "${RED}❌ 错误：请在 OpenWrt 源码根目录运行此脚本。${NC}"
+    echo -e "${RED}❌ 错误：请在 OpenWrt 源码根目录运行。${NC}"
     exit 1
 fi
-
 print_header
 
-# 寻找同目录下的补丁文件
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DTS_SRC="${SCRIPT_DIR}/ipq8072-salvage-1.dts"
 BOARD_SRC="${SCRIPT_DIR}/board-cuicanmx_salvage-1.ipq8074"
-
-if [ ! -f "$DTS_SRC" ]; then
-    echo -e "${RED}❌ 未找到设备树文件: ${DTS_SRC}${NC}"
-    echo "请将 ipq8072-salvage-1.dts 放置在与脚本相同的目录。"
-    exit 1
-fi
-if [ ! -f "$BOARD_SRC" ]; then
-    echo -e "${RED}❌ 未找到 WiFi 板级固件: ${BOARD_SRC}${NC}"
-    echo "请将 board-cuicanmx_salvage-1.ipq8074 放置在与脚本相同的目录。"
-    exit 1
-fi
+[ ! -f "$DTS_SRC" ] && echo -e "${RED}❌ 缺失 DTS: ${DTS_SRC}${NC}" && exit 1
+[ ! -f "$BOARD_SRC" ] && echo -e "${RED}❌ 缺失 Board: ${BOARD_SRC}${NC}" && exit 1
 
 TOTAL_STEPS=8
 STEP=0
 
 #===========================
-# 1. 复制设备树文件
+# 1. 复制设备树
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "复制设备树 (DTS)"
-DTS_DST="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
-mkdir -p "$(dirname "$DTS_DST")"
-if [ -f "$DTS_DST" ]; then
-    print_skip "$DTS_DST"
-else
-    cp "$DTS_SRC" "$DTS_DST"
-    print_ok "DTS 已复制到 $DTS_DST"
-fi
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 DTS"
+DST="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
+mkdir -p "$(dirname "$DST")"
+if [ -f "$DST" ]; then print_skip "$DST"; else cp "$DTS_SRC" "$DST"; print_ok "DTS 已复制"; fi
 
 #===========================
-# 2. 复制 WiFi 板级固件
+# 2. 复制 WiFi 固件
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "复制 WiFi 板级固件"
-BOARD_DST="package/firmware/ipq-wifi/src/board-cuicanmx_salvage-1.ipq8074"
-mkdir -p "$(dirname "$BOARD_DST")"
-if [ -f "$BOARD_DST" ]; then
-    print_skip "$BOARD_DST"
-else
-    cp "$BOARD_SRC" "$BOARD_DST"
-    print_ok "Board 文件已复制到 $BOARD_DST"
-fi
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 Board 固件"
+DST="package/firmware/ipq-wifi/src/board-cuicanmx_salvage-1.ipq8074"
+mkdir -p "$(dirname "$DST")"
+if [ -f "$DST" ]; then print_skip "$DST"; else cp "$BOARD_SRC" "$DST"; print_ok "Board 已复制"; fi
 
 #===========================
 # 3. uboot-envtools
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "uboot-envtools 环境变量"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "uboot-envtools"
 F="package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq807x"
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    sed -i '/zte,mf269)/a\\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;' "$F"
-    print_ok "$F 已修改"
+    awk -v add='\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;' \
+      '{print} /zte,mf269)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    print_ok "$F"
 fi
 
 #===========================
 # 4. ipq-wifi Makefile
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "ipq-wifi 包注册"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "ipq-wifi Makefile"
 F="package/firmware/ipq-wifi/Makefile"
 if grep -q 'cuicanmx_salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    # 在 ALLWIFIBOARDS 列表插入一行（带续行符）
+    # 插入 ALLWIFIBOARDS 行
     awk -v add='\tcuicanmx_salvage-1 \\' \
-      '{print} /cmiot_ax18 \\/{print add}' \
-      "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-    # 在末尾追加 eval 调用
+      '{print} /cmiot_ax18 \\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # 插入 eval 行
     awk -v add='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))' \
       '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print add}' \
       "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-    print_ok "$F 已修改"
+    print_ok "$F"
 fi
 
 #===========================
-# 5. 映像生成规则
+# 5. ipq807x.mk 映像定义
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "映像生成规则 (ipq807x.mk)"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "映像定义 ipq807x.mk"
 F="target/linux/qualcommax/image/ipq807x.mk"
 if grep -q 'Device/cuicanmx_salvage-1' "$F"; then
     print_skip "$F"
@@ -147,63 +118,100 @@ define Device/cuicanmx_salvage-1
 endef
 TARGET_DEVICES += cuicanmx_salvage-1
 MK_EOF
-    print_ok "已追加设备定义到 $F"
+    print_ok "$F"
 fi
 
 #===========================
-# 6. 网络接口配置
+# 6. 02_network
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "网络接口 (02_network)"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "网络接口 02_network"
 F="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    sed -i '/compex,wpq873\\/a\\tcuicanmx,salvage-1|\\' "$F"
-    print_ok "$F 已修改"
+    awk -v add='\tcuicanmx,salvage-1|\\' \
+      '{print} /compex,wpq873\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    print_ok "$F"
 fi
 
 #===========================
-# 7. WiFi 校准数据
+# 7. 11-ath11k-caldata
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "WiFi 校准数据提取"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "WiFi 校准数据"
 F="target/linux/qualcommax/ipq807x/base-files/etc/hotplug.d/firmware/11-ath11k-caldata"
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    sed -i '/zyxel,nwa210ax)/a\\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;' "$F"
-    print_ok "$F 已修改"
+    awk -v add='\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;' \
+      '{print} /zyxel,nwa210ax)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    print_ok "$F"
 fi
 
 #===========================
-# 8. 升级支持
+# 8. platform.sh 升级
 #===========================
-STEP=$((STEP+1))
-print_step $STEP $TOTAL_STEPS "升级平台 (platform.sh)"
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "升级平台 platform.sh"
 F="target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    sed -i '/aliyun,ap8220\\/a\\tcuicanmx,salvage-1|\\' "$F"
-    print_ok "$F 已修改"
+    awk -v add='\tcuicanmx,salvage-1|\\' \
+      '{print} /aliyun,ap8220\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    print_ok "$F"
 fi
 
 #===========================
-# Summary
+# 最终展示修改内容
 #===========================
 echo -e "\n${CYAN}${BOLD}============================================${NC}"
-echo -e "${CYAN}${BOLD}   ${PARTY} 补丁应用完毕！关键修改摘要${NC}"
+echo -e "${CYAN}${BOLD}   ${MAG} 修改验证：关键文件内容展示${NC}"
 echo -e "${CYAN}${BOLD}============================================${NC}\n"
-echo -e "  ${FILE_ICON}  DTS               : ipq8072-salvage-1.dts → 设备树"
-echo -e "  ${FILE_ICON}  Board Firmware    : board-cuicanmx_salvage-1.ipq8074"
-echo -e "  ${FILE_ICON}  uboot-envtools    : APPSBLENV 分区 (0x10000)"
-echo -e "  ${FILE_ICON}  ipq-wifi Makefile : 注册板级包"
-echo -e "  ${FILE_ICON}  ipq807x.mk        : FIT/Ubi 映像，NAND 升级"
-echo -e "  ${FILE_ICON}  02_network        : lan/wan 接口绑定"
-echo -e "  ${FILE_ICON}  caldata           : ART 偏移 0x20000 校准"
-echo -e "  ${FILE_ICON}  platform.sh       : sysupgrade 支持"
-echo -e "\n${GREEN}现在可以执行 make menuconfig 并选择 Target Profile = CUICANMX Salvage-1${NC}"
+
+show_section() {
+    local title="$1" file="$2" pattern="$3" context="${4:-2}"
+    echo -e "${BOLD}${FILE_ICON}  ${title} (${file})${NC}"
+    if grep -q "$pattern" "$file"; then
+        grep -n -A${context} -B${context} "$pattern" "$file" | sed 's/^/  /'
+    else
+        echo -e "   ${RED}❌ 未找到匹配行！${NC}"
+    fi
+    echo ""
+}
+
+# uboot-envtools
+show_section "uboot-envtools 新增片段" \
+  "package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq807x" \
+  "cuicanmx,salvage-1" 2
+
+# ipq-wifi Makefile: 两个位置
+echo -e "${BOLD}${FILE_ICON}  ipq-wifi Makefile ALLWIFIBOARDS${NC}"
+grep -n -A1 "cuicanmx_salvage-1" package/firmware/ipq-wifi/Makefile | sed 's/^/  /'
+echo ""
+echo -e "${BOLD}${FILE_ICON}  ipq-wifi Makefile 包评估${NC}"
+grep -n "cuicanmx_salvage-1,CUICANMX" package/firmware/ipq-wifi/Makefile | sed 's/^/  /'
+echo ""
+
+# ipq807x.mk (Device)
+show_section "ipq807x.mk 设备定义" \
+  "target/linux/qualcommax/image/ipq807x.mk" \
+  "cuicanmx_salvage-1" 5
+
+# 02_network
+show_section "02_network 接口" \
+  "target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network" \
+  "cuicanmx,salvage-1" 1
+
+# 11-ath11k-caldata
+show_section "11-ath11k-caldata" \
+  "target/linux/qualcommax/ipq807x/base-files/etc/hotplug.d/firmware/11-ath11k-caldata" \
+  "cuicanmx,salvage-1" 2
+
+# platform.sh
+show_section "platform.sh 升级匹配" \
+  "target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh" \
+  "cuicanmx,salvage-1" 1
+
+echo -e "${GREEN}${PARTY} 全部完成！现在可运行 make menuconfig，选择 Target Profile = CUICANMX Salvage-1${NC}"
