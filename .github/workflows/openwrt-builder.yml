@@ -87,6 +87,16 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+    - name: Restore build cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          /workdir/openwrt/dl
+          /workdir/openwrt/build_dir
+          /workdir/openwrt/staging_dir
+        key: openwrt-cache
 
     - name: Download package
       id: package
