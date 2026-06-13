@@ -19,7 +19,7 @@
 
 #git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
 
-echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
+#echo 'src-git qmodem https://github.com/FUjr/QModem.git;main' >> feeds.conf.default
 
 # 更新并安装软件源包
 # ./scripts/feeds update qmodem
