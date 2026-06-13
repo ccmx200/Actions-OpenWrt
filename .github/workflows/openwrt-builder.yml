@@ -93,7 +93,6 @@ jobs:
       uses: actions/cache@v4
       with:
         path: |
-          /workdir/openwrt/dl
           /workdir/openwrt/build_dir
           /workdir/openwrt/staging_dir
         key: openwrt-cache
