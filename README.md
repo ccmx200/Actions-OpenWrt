@@ -13,7 +13,7 @@
 - ✅ 有线网络正常（lan1‑lan3 + wan 2.5G，支持NSS 加速 'libwrt CONFIG_NSS_FIRMWARE_VERSION_11_4=y'）
 - ✅ USB 3.0 正常
 - ✅ SD卡槽正常
-- 已添加QModem和相关内核配置到固件,但因为m.2接口无法驱动目前只能使用usb转接板，网口mac需要自行固化
+- m.2接口无法驱动目前只能使用usb转接板，网口mac需要自行固化,QModem如需使用请自行安装不在直接包含在现有构建中
 
 ---
 
