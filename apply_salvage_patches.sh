@@ -9,7 +9,7 @@ CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
 CHECK="✅"; WARN="⚠️"; GEAR="⚙️"; FILE_ICON="📄"; PARTY="🎉"; MAG="🔍"
 
 #===========================
-# Helper
+# Helper Functions
 #===========================
 print_header() {
     echo -e "${CYAN}${BOLD}============================================${NC}"
@@ -19,11 +19,29 @@ print_header() {
 print_step() { echo -e "${BOLD}${GEAR} 步骤 $1/$2: $3${NC}"; }
 print_ok()   { echo -e "   ${GREEN}${CHECK} ${1}${NC}"; }
 print_skip() { echo -e "   ${YELLOW}${WARN} 跳过：${1}（已存在）${NC}"; }
+print_fix()  { echo -e "   ${YELLOW}🔧 修复：${1}${NC}"; }
+print_err()  { echo -e "   ${RED}❌ ${1}${NC}"; exit 1; }
+
 backup_file() {
     local f="$1"
     if [ -f "$f" ]; then
-        cp "$f" "${f}.bak.$(date +%s)"
-        echo -e "   ℹ️  已备份：${f}.bak"
+        local bak="${f}.bak.$(date +%s)"
+        cp "$f" "$bak"
+        echo -e "   ℹ️  已备份：${bak}"
+    fi
+}
+
+# 在文件中匹配 pattern 的行的后面插入一行内容
+# 用法: insert_line_after <文件> <锚点pattern> <要插入的完整行>
+insert_line_after() {
+    local file="$1" pattern="$2" line="$3"
+    if grep -Fxq "$line" "$file"; then
+        return 1   # 已存在完全相同行
+    else
+        backup_file "$file"
+        awk -v line="$line" '{print} $0 ~ pattern {print line}' pattern="$pattern" "$file" > "${file}.tmp" \
+            && mv "${file}.tmp" "$file"
+        return 0
     fi
 }
 
@@ -51,7 +69,12 @@ STEP=0
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 DTS"
 DST="target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8072-salvage-1.dts"
 mkdir -p "$(dirname "$DST")"
-if [ -f "$DST" ]; then print_skip "$DST"; else cp "$DTS_SRC" "$DST"; print_ok "DTS 已复制"; fi
+if [ -f "$DST" ]; then
+    print_skip "$DST"
+else
+    cp "$DTS_SRC" "$DST"
+    print_ok "DTS 已复制"
+fi
 
 #===========================
 # 2. 复制 Board 固件
@@ -59,20 +82,26 @@ if [ -f "$DST" ]; then print_skip "$DST"; else cp "$DTS_SRC" "$DST"; print_ok "D
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "复制 Board 固件"
 DST="package/firmware/ipq-wifi/src/board-cuicanmx_salvage-1.ipq8074"
 mkdir -p "$(dirname "$DST")"
-if [ -f "$DST" ]; then print_skip "$DST"; else cp "$BOARD_SRC" "$DST"; print_ok "Board 已复制"; fi
+if [ -f "$DST" ]; then
+    print_skip "$DST"
+else
+    cp "$BOARD_SRC" "$DST"
+    print_ok "Board 已复制"
+fi
 
 #===========================
 # 3. uboot-envtools
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "uboot-envtools"
 F="package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq807x"
+ENTRY=$'cuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;'
+
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    # 使用真实 Tab 缩进
-    add=$'\tcuicanmx,salvage-1)\n\t\tubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"\n\t\t;;'
-    awk -v add="$add" '{print} /zte,mf269)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    # 插入到 zte,mf269) 后面
+    awk -v add="$ENTRY" '{print} /zte,mf269\)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
@@ -81,17 +110,28 @@ fi
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "ipq-wifi Makefile"
 F="package/firmware/ipq-wifi/Makefile"
-if grep -q 'cuicanmx_salvage-1' "$F"; then
-    print_skip "$F"
+
+# ALLWIFIBOARDS 续行符行
+LINE1=$'cuicanmx_salvage-1 \\'
+# 包定义行
+LINE2='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))'
+
+if grep -Fxq "$LINE1" "$F" && grep -Fxq "$LINE2" "$F"; then
+    print_skip "$F (两处均已存在)"
 else
-    backup_file "$F"
-    # ALLWIFIBOARDS 行 (带 Tab 和续行符)
-    add=$'\tcuicanmx_salvage-1 \\'
-    awk -v add="$add" '{print} /cmiot_ax18 \\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-    # eval 调用行 (无缩进要求)
-    add2='$(eval $(call generate-ipq-wifi-package,cuicanmx_salvage-1,CUICANMX Salvage-1))'
-    awk -v add="$add2" '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print add}' \
-        "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    if ! grep -Fxq "$LINE1" "$F"; then
+        backup_file "$F"
+        # 在 cmiot_ax18 \ 后插入
+        awk -v line="$LINE1" '{print} /cmiot_ax18 \\/{print line}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+        print_ok "已添加 ALLWIFIBOARDS 条目"
+    fi
+    if ! grep -Fxq "$LINE2" "$F"; then
+        backup_file "$F"
+        # 在 Zyxel SCR50AXE 包后面插入
+        awk -v line="$LINE2" '{print} /\$\(eval \$\(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE\)\)/{print line}' \
+            "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+        print_ok "已添加 package 定义"
+    fi
     print_ok "$F"
 fi
 
@@ -100,13 +140,7 @@ fi
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "映像定义 ipq807x.mk"
 F="target/linux/qualcommax/image/ipq807x.mk"
-if grep -q 'Device/cuicanmx_salvage-1' "$F"; then
-    print_skip "$F"
-else
-    backup_file "$F"
-    cat >> "$F" << 'MK_EOF'
-
-define Device/cuicanmx_salvage-1
+BLOCK='define Device/cuicanmx_salvage-1
   $(call Device/FitImage)
   $(call Device/UbiFit)
   DEVICE_VENDOR := CUICANMX
@@ -117,22 +151,35 @@ define Device/cuicanmx_salvage-1
   SOC := ipq8072
   DEVICE_PACKAGES := ath11k-firmware-ipq8074 ipq-wifi-cuicanmx_salvage-1
 endef
-TARGET_DEVICES += cuicanmx_salvage-1
-MK_EOF
-    print_ok "$F"
-fi
+TARGET_DEVICES += cuicanmx_salvage-1'
 
-#===========================
-# 6. 02_network (修复模式)
-#===========================
-STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "网络接口 02_network"
-F="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
-if grep -q 'cuicanmx,salvage-1' "$F"; then
+if grep -q 'Device/cuicanmx_salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    add=$'\tcuicanmx,salvage-1|\\'
-    awk -v add="$add" '{print} /compex,wpq873\|\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    echo "" >> "$F"
+    echo "$BLOCK" >> "$F"
+    print_ok "$F (已追加设备定义)"
+fi
+
+#===========================
+# 6. 02_network（含智能续行符修复）
+#===========================
+STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "网络接口 02_network"
+F="target/linux/qualcommax/ipq807x/base-files/etc/board.d/02_network"
+CORRECT_LINE=$'\tcuicanmx,salvage-1|\\'
+MISSING_LINE=$'\tcuicanmx,salvage-1|'   # 缺少结尾 \
+
+if grep -Fxq "$CORRECT_LINE" "$F"; then
+    print_skip "$F (格式正确)"
+elif grep -Fxq "$MISSING_LINE" "$F"; then
+    print_fix "02_network 中续行符缺失，正在修复..."
+    backup_file "$F"
+    sed -i 's/^\([[:space:]]*cuicanmx,salvage-1|\)$/\1\\/' "$F"
+    print_ok "续行符已补全"
+else
+    backup_file "$F"
+    insert_line_after "$F" 'compex,wpq873|\\' "$CORRECT_LINE"
     print_ok "$F"
 fi
 
@@ -141,26 +188,34 @@ fi
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "WiFi 校准数据"
 F="target/linux/qualcommax/ipq807x/base-files/etc/hotplug.d/firmware/11-ath11k-caldata"
+ENTRY=$'cuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;'
+
 if grep -q 'cuicanmx,salvage-1' "$F"; then
     print_skip "$F"
 else
     backup_file "$F"
-    add=$'\tcuicanmx,salvage-1)\n\t\tcaldata_extract "0:ART" 0x20000 0x20000\n\t\t;;'
-    awk -v add="$add" '{print} /zyxel,nwa210ax)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    awk -v add="$ENTRY" '{print} /zyxel,nwa210ax\)/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     print_ok "$F"
 fi
 
 #===========================
-# 8. platform.sh (修复模式)
+# 8. platform.sh（含智能续行符修复）
 #===========================
 STEP=$((STEP+1)); print_step $STEP $TOTAL_STEPS "升级平台 platform.sh"
 F="target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
-if grep -q 'cuicanmx,salvage-1' "$F"; then
-    print_skip "$F"
+CORRECT_LINE=$'\tcuicanmx,salvage-1|\\'
+MISSING_LINE=$'\tcuicanmx,salvage-1|'
+
+if grep -Fxq "$CORRECT_LINE" "$F"; then
+    print_skip "$F (格式正确)"
+elif grep -Fxq "$MISSING_LINE" "$F"; then
+    print_fix "platform.sh 中续行符缺失，正在修复..."
+    backup_file "$F"
+    sed -i 's/^\([[:space:]]*cuicanmx,salvage-1|\)$/\1\\/' "$F"
+    print_ok "续行符已补全"
 else
     backup_file "$F"
-    add=$'\tcuicanmx,salvage-1|\\'
-    awk -v add="$add" '{print} /aliyun,ap8220\|\\/{print add}' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+    insert_line_after "$F" 'aliyun,ap8220|\\' "$CORRECT_LINE"
     print_ok "$F"
 fi
 
