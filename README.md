@@ -1,6 +1,6 @@
-# Salvage-1 OpenWrt 固件
+# Salvage-1 OpenWrt 固件 
 
-**硬件平台：IPQ8072a（三木爱折腾） | 自适配设备 | QCA8075 + QCA8081**
+**硬件平台：IPQ8072a（三木爱折腾） | 自适配设备(注意建议去看这个自己编译，云编译的固件可能有问题，https://github.com/ccmx200/openwrt-6.x) | QCA8075 + QCA8081**
 
 ---
 
